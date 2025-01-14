@@ -50,4 +50,6 @@ namespace rfs {
     extern std::vector<uint8_t> downloadBuffer;
     void writeThread_t(void *a);
     size_t writeDataBufferThreaded(uint8_t *buff, size_t sz, size_t cnt, void *u);
+
+    size_t writeDataToFile(void* ptr, size_t size, size_t nmemb, void* userdata);
 }
