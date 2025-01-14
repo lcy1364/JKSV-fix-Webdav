@@ -1,6 +1,7 @@
 #include "webdav.h"
 #include "fs.h"
 #include "tinyxml2.h"
+#include <fstream>
 
 rfs::WebDav::WebDav(const std::string& origin, const std::string& username, const std::string& password)
     : origin(origin), username(username), password(password)
@@ -117,36 +118,126 @@ void rfs::WebDav::updateFile(const std::string& _fileID, curlFuncs::curlUpArgs *
 
     curl_easy_cleanup(local_curl); // Clean up the CURL handle
 }
-void rfs::WebDav::downloadFile(const std::string& _fileID, curlFuncs::curlDlArgs *_download) {
-    //Downloading is threaded because it's too slow otherwise
-    dlWriteThreadStruct dlWrite;
-    dlWrite.cfa = _download;
-
-    Thread writeThread;
-    threadCreate(&writeThread, writeThread_t, &dlWrite, NULL, 0x8000, 0x2B, 2);
 
 
-    CURL* local_curl = curl_easy_duphandle(curl);
+//void rfs::WebDav::downloadFile(const std::string& _fileID, curlFuncs::curlDlArgs *_download) {
+//    //Downloading is threaded because it's too slow otherwise
+//    dlWriteThreadStruct dlWrite;
+//    dlWrite.cfa = _download;
+//
+//    Thread writeThread;
+//    threadCreate(&writeThread, writeThread_t, &dlWrite, NULL, 0x8000, 0x2B, 2);
+//
+//
+//    CURL* local_curl = curl_easy_duphandle(curl);
+//
+//    std::string fullUrl = origin + _fileID;
+//    curl_easy_setopt(local_curl, CURLOPT_URL, fullUrl.c_str());
+//    curl_easy_setopt(local_curl, CURLOPT_WRITEFUNCTION, writeDataBufferThreaded);
+//    curl_easy_setopt(local_curl, CURLOPT_WRITEDATA, &dlWrite);
+//    threadStart(&writeThread);
+//
+//    CURLcode res = curl_easy_perform(local_curl);
+//
+//    // Copied from gd.cpp implementation.
+//    // TODO: Not sure how a thread helps if this parent waits here.
+//    threadWaitForExit(&writeThread);
+//    threadClose(&writeThread);
+//
+//    if(res != CURLE_OK) {
+//        fs::logWrite("WebDav: file download failed: %s\n", curl_easy_strerror(res));
+//    }
+//
+//    curl_easy_cleanup(local_curl);
+//}
 
+
+
+
+//void rfs::WebDav::downloadFile(const std::string& _fileID, curlFuncs::curlDlArgs* _download) {
+//    // 构建完整的下载URL
+//    std::string fullUrl = origin + _fileID;
+////
+////    // 打开文件用于写入
+////    std::ofstream outputFile(_download->filePath, std::ios::binary);
+////    if (!outputFile.is_open()) {
+////        fs::logWrite("WebDav: 无法打开文件用于写入: %s\n", _download->filePath.c_str());
+////        return;
+////    }
+////
+////    // 配置CURL选项
+//    CURL* local_curl = curl_easy_duphandle(curl);
+////    if (!local_curl) {
+////        fs::logWrite("WebDav: 无法复制CURL句柄\n");
+////        outputFile.close();
+////        return;
+////    }
+//
+////    dlWriteThreadStruct dlWrite;
+//    dlWrite.cfa = _download;
+//
+//    curl_easy_setopt(local_curl, CURLOPT_URL, fullUrl.c_str());
+//    curl_easy_setopt(local_curl, CURLOPT_WRITEFUNCTION, writeDataToFile);
+//    curl_easy_setopt(local_curl, CURLOPT_WRITEDATA, dlWrite);
+//
+//    // 执行下载
+//    CURLcode res = curl_easy_perform(local_curl);
+//
+//    // 清理CURL资源
+//    curl_easy_cleanup(local_curl);
+////    outputFile.close();
+//
+//    // 检查下载结果
+////    if (res != CURLE_OK) {
+////        fs::logWrite("WebDav: 文件下载失败: %s\n", curl_easy_strerror(res));
+////        // 根据需要，可以删除空文件或进行其他处理
+////    } else {
+////        fs::logWrite("WebDav: 文件下载成功: %s\n", _download->filePath.c_str());
+////    }
+//}
+
+
+
+void rfs::WebDav::downloadFile(const std::string& _fileID, curlFuncs::curlDlArgs* _download) {
+    // 构建完整的下载URL
     std::string fullUrl = origin + _fileID;
-    curl_easy_setopt(local_curl, CURLOPT_URL, fullUrl.c_str());
-    curl_easy_setopt(local_curl, CURLOPT_WRITEFUNCTION, writeDataBufferThreaded);
-    curl_easy_setopt(local_curl, CURLOPT_WRITEDATA, &dlWrite);
-    threadStart(&writeThread);
 
-    CURLcode res = curl_easy_perform(local_curl);
-
-    // Copied from gd.cpp implementation.
-    // TODO: Not sure how a thread helps if this parent waits here.
-    threadWaitForExit(&writeThread);
-    threadClose(&writeThread);
-
-    if(res != CURLE_OK) {
-        fs::logWrite("WebDav: file download failed: %s\n", curl_easy_strerror(res));
+    // 打开文件用于写入
+    std::ofstream outputFile(_download->path, std::ios::binary);
+    if (!outputFile.is_open()) {
+        fs::logWrite("WebDav: 无法打开文件用于写入: %s\n", _download->path.c_str());
+        return;
     }
 
+    // 配置CURL选项
+    CURL* local_curl = curl_easy_duphandle(curl);
+    if (!local_curl) {
+        fs::logWrite("WebDav: 无法复制CURL句柄\n");
+        outputFile.close();
+        return;
+    }
+
+    curl_easy_setopt(local_curl, CURLOPT_URL, fullUrl.c_str());
+    curl_easy_setopt(local_curl, CURLOPT_WRITEFUNCTION, writeDataToFile);
+    curl_easy_setopt(local_curl, CURLOPT_WRITEDATA, &outputFile);
+
+    // 执行下载
+    CURLcode res = curl_easy_perform(local_curl);
+
+    // 清理CURL资源
     curl_easy_cleanup(local_curl);
+    outputFile.close();
+
+    // 检查下载结果
+    if (res != CURLE_OK) {
+        fs::logWrite("WebDav: 文件下载失败: %s\n", curl_easy_strerror(res));
+        // 根据需要，可以删除空文件或进行其他处理
+    } else {
+        fs::logWrite("WebDav: 文件下载成功: %s\n", _download->path.c_str());
+    }
 }
+
+
 void rfs::WebDav::deleteFile(const std::string& _fileID) {
     CURL* local_curl = curl_easy_duphandle(curl);
 

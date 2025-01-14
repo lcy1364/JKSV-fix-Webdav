@@ -1,4 +1,5 @@
 #include "rfs.h"
+#include <fstream>
 
 std::vector<uint8_t> rfs::downloadBuffer;
 
@@ -48,4 +49,13 @@ size_t rfs::writeDataBufferThreaded(uint8_t *buff, size_t sz, size_t cnt, void *
         *in->cfa->o = in->downloaded;
 
     return sz * cnt;
+}
+
+size_t rfs::writeDataToFile(void* ptr, size_t size, size_t nmemb, void* userdata) {
+    std::ofstream* ofs = static_cast<std::ofstream*>(userdata);
+    if (ofs->is_open()) {
+        ofs->write(static_cast<char*>(ptr), size * nmemb);
+        return size * nmemb;
+    }
+    return 0; // 返回0表示写入失败，curl 会中止下载
 }
